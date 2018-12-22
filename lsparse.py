@@ -4,15 +4,21 @@ import pandas as pa
 class lsparse:
     def __init__(self, filename):
         with open(filename) as fd:
-            self.raw = fd.read()
-        self.soup = bs4.BeautifulSoup(self.raw, 'lxml')
+            raw = fd.read()
+        self._parse_file(raw)
+        self._setup_dfs()
+        
+
+
+    def _parse_file(self, raw):
+        soup = bs4.BeautifulSoup(raw, 'lxml')
         self.data = {}
-        self.data['game'] = self.soup.run.gamename.string
-        self.data['category'] = self.soup.run.categoryname.string
-        self.data['offset'] = self.soup.offset.string
-        self.data['count'] = self.soup.run.attemptcount.string
+        self.data['game'] = soup.run.gamename.string
+        self.data['category'] = soup.run.categoryname.string
+        self.data['offset'] = soup.offset.string
+        self.data['count'] = soup.run.attemptcount.string
         self.attempts = {}
-        for x in self.soup.attempthistory.find_all('attempt'):
+        for x in soup.attempthistory.find_all('attempt'):
             aid = x['id']
             self.attempts[aid] = {}
             attempt = self.attempts[aid]
@@ -23,7 +29,7 @@ class lsparse:
             if x.find('pausetime') is not None:
                 attempt['pausetime'] = x.pausetime.string
         self.splits = {}
-        for x in self.soup.segments.find_all('segment'):
+        for x in soup.segments.find_all('segment'):
             name = x.find('name').string
             self.splits[name] = {}
             self.splits[name]['gold'] = x.bestsegmenttime.realtime.string
@@ -35,15 +41,17 @@ class lsparse:
                 else:
                     #print(name + " ID:" + y['id'] + " is not in attempt data!")
                     None
+                    
+    def _setup_dfs(self):
         self.splitsdf = pa.DataFrame(self.splits)
         self.attemptsdf = pa.DataFrame.from_dict(self.attempts,orient='index')
         self.attemptsdf.index = pa.to_numeric(self.attemptsdf.index)
         self.attemptsdf.index.name = 'id'
+        self.attemptsdf.sort_index(inplace=True)
         tmp = lambda x : pa.to_datetime(x) - pa.to_timedelta(5,unit='h')
         self.attemptsdf['started'] = self.attemptsdf['started'].apply(tmp)
         self.attemptsdf['ended'] = self.attemptsdf['ended'].apply(tmp)
         tmp = lambda x : pa.to_timedelta(x, unit='s', errors='coerce')
-        keys = list(self.splits)
         for key in self.splits:
             self.attemptsdf[key] = self.attemptsdf[key].apply(tmp)
             self.splitsdf[key] = self.splitsdf[key].apply(tmp)
@@ -53,7 +61,10 @@ class lsparse:
         self.splitsdf = self.splitsdf.append(tmp)
         self.splitsdf = self.splitsdf.T
         self.splitsdf = self.splitsdf[['gold','pb_segment','pb_split']]
-
-
-
+        tmp = pa.Series()
+        tmp.name = 'gold_date'
+        for key in self.splits:
+            date = self.attemptsdf[self.attemptsdf[key] == self.splitsdf.loc[key]['gold']]['started']
+            tmp[key] = date.values[0]
+        self.splitsdf['gold_date'] = tmp
         
