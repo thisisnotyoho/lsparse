@@ -22,6 +22,11 @@ class lsparse:
             aid = x['id']
             self.attempts[aid] = {}
             attempt = self.attempts[aid]
+            if 'started' not in x.attrs:
+                continue
+            if 'ended' not in x.attrs:
+                continue
+            
             attempt['started'] = x['started']
             attempt['ended'] = x['ended']
             if x.find('realtime') is not None:
@@ -51,10 +56,11 @@ class lsparse:
         tmp = lambda x : pa.to_datetime(x) - pa.to_timedelta(5,unit='h')
         self.attemptsdf['started'] = self.attemptsdf['started'].apply(tmp)
         self.attemptsdf['ended'] = self.attemptsdf['ended'].apply(tmp)
-        tmp = lambda x : pa.to_timedelta(x, unit='s', errors='coerce')
+        tmp = lambda x : pa.to_timedelta(x, unit='s', errors='coerce').total_seconds()
         for key in self.splits:
             self.attemptsdf[key] = self.attemptsdf[key].apply(tmp)
             self.splitsdf[key] = self.splitsdf[key].apply(tmp)
+        self.attemptsdf['realtime'] = self.attemptsdf['realtime'].apply(tmp)
         tmp = self.splitsdf.loc['pb_split'].diff()
         tmp.name = 'pb_segment'
         tmp[0] = self.splitsdf.loc['pb_split'][0]
@@ -65,6 +71,14 @@ class lsparse:
         tmp.name = 'gold_date'
         for key in self.splits:
             date = self.attemptsdf[self.attemptsdf[key] == self.splitsdf.loc[key]['gold']]['started']
-            tmp[key] = date.values[0]
+            try:
+                tmp[key] = date.values[0]
+            except:
+                tmp[key] = None
         self.splitsdf['gold_date'] = tmp
+        self.attemptsdf['id'] = self.attemptsdf.index
         
+    def group(self,freq='1d'):
+        grouped = self.attemptsdf.groupby(pa.Grouper(key='started',freq=freq))
+        return grouped.agg(['count','min','max','mean','std'])
+    
