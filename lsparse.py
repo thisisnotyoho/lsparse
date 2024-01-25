@@ -56,7 +56,7 @@ class lsparse:
         tmp = lambda x : pa.to_datetime(x) - pa.to_timedelta(5,unit='h')
         self.attemptsdf['started'] = self.attemptsdf['started'].apply(tmp)
         self.attemptsdf['ended'] = self.attemptsdf['ended'].apply(tmp)
-        tmp = lambda x : pa.to_timedelta(x, unit='s', errors='coerce').total_seconds()
+        tmp = lambda x : pa.to_timedelta(str(x), errors='coerce').total_seconds()
         for key in self.splits:
             self.attemptsdf[key] = self.attemptsdf[key].apply(tmp)
             self.splitsdf[key] = self.splitsdf[key].apply(tmp)
@@ -64,7 +64,7 @@ class lsparse:
         tmp = self.splitsdf.loc['pb_split'].diff()
         tmp.name = 'pb_segment'
         tmp[0] = self.splitsdf.loc['pb_split'][0]
-        self.splitsdf = self.splitsdf.append(tmp)
+        self.splitsdf = self.splitsdf._append(tmp)
         self.splitsdf = self.splitsdf.T
         self.splitsdf = self.splitsdf[['gold','pb_segment','pb_split']]
         tmp = pa.Series()
@@ -75,7 +75,7 @@ class lsparse:
                 tmp[key] = date.values[0]
             except:
                 tmp[key] = None
-        self.splitsdf['gold_date'] = tmp
+        self.splitsdf['gold_date'] = pa.to_datetime(tmp, errors='coerce')
         self.attemptsdf['id'] = self.attemptsdf.index
         
     def group(self,freq='1d'):
